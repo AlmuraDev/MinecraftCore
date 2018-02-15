@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.util.*;
 
 public class MinecraftLauncher {
+
     private final LauncherDirectories directories;
     private final IPlatformApi platformApi;
     private final UserModel<MojangUser> userModel;
@@ -66,14 +67,18 @@ public class MinecraftLauncher {
         boolean first = true;
 
         for (String part : commands) {
-            if (!first) full.append(" ");
+            if (!first) {
+                full.append(" ");
+            }
             full.append(part);
             first = false;
         }
         Utils.getLogger().info("Running " + full.toString());
         Process process = new ProcessBuilder(commands).directory(pack.getInstalledDirectory()).redirectErrorStream(true).start();
         GameProcess mcProcess = new GameProcess(commands, process);
-        if (exitListener != null) mcProcess.setExitListener(exitListener);
+        if (exitListener != null) {
+            mcProcess.setExitListener(exitListener);
+        }
 
         platformApi.incrementPackRuns(pack.getName());
         if (!Utils.sendTracking("runModpack", pack.getName(), pack.getInstalledVersion().getVersion(), options.getOptions().getClientId())) {
@@ -90,7 +95,7 @@ public class MinecraftLauncher {
         OperatingSystem operatingSystem = OperatingSystem.getOperatingSystem();
 
         if (operatingSystem.equals(OperatingSystem.OSX)) {
-            commands.add("-Xdock:icon="+options.getIconPath());
+            commands.add("-Xdock:icon=" + options.getIconPath());
             commands.add("-Xdock:name=" + pack.getDisplayName());
         } else if (operatingSystem.equals(OperatingSystem.WINDOWS)) {
             // I have no idea if this helps technic or not.
@@ -106,21 +111,41 @@ public class MinecraftLauncher {
             permSize = 256;
         }
 
+        final String[] argsList = options.getOptions().getJavaArgs().split("-");
+
         // So in 1.8 permgen autoscales- only problem, it doesn't do it based on RAM allocation like we do, instead
         // It has a SEPARATE heap for permgen that is by default unbounded by anything.  Result: instead of 2GB
         // with 256m set aside for permgen, you have a whole 2GB PLUS however much permgen uses.
+
+
         commands.add("-Xms" + memory + "m");
         commands.add("-Xmx" + memory + "m");
 
-        if (!RunData.isJavaVersionAtLeast(launchJavaVersion, "1.8"))
-            commands.add("-XX:MaxPermSize=" + permSize + "m");
+        if (argsList.length > 0) {  // Skip non-xms/xmx memory default JVM arguments if user has provided them.
+            if (!RunData.isJavaVersionAtLeast(launchJavaVersion, "1.8")) {
+                commands.add("-XX:MaxPermSize=" + permSize + "m");
+            }
 
-        if (memory >= 4096) {
-            if (RunData.isJavaVersionAtLeast(launchJavaVersion, "1.7")) {
-                commands.add("-XX:+UseG1GC");
-                commands.add("-XX:MaxGCPauseMillis=4");
-            } else {
-                commands.add("-XX:+UseConcMarkSweepGC");
+            if (memory >= 4096) {
+                if (RunData.isJavaVersionAtLeast(launchJavaVersion, "1.7")) {
+                    commands.add("-XX:+UseG1GC");
+                    commands.add("-XX:MaxGCPauseMillis=4");
+                } else {
+                    commands.add("-XX:+UseConcMarkSweepGC");
+                }
+            }
+        }
+
+        if (argsList.length > 0) {
+            int x = 1;
+            while (x < argsList.length) {
+                if (!(argsList[x].toLowerCase().contains("xms") | argsList[x].toLowerCase().contains("xmx"))) {
+                    System.out.println("Adding user specified jvm argument: " + x + " : " + argsList[x]);
+                    commands.add("-" + argsList[x].trim());
+                } else {
+                    System.out.println("Skipping JVM Argument, already supplied: " + argsList[x]);
+                }
+                x++;
             }
         }
 
@@ -130,8 +155,9 @@ public class MinecraftLauncher {
         commands.add("-Dminecraft.applet.TargetDirectory=" + pack.getInstalledDirectory().getAbsolutePath());
         commands.add("-Djava.net.preferIPv4Stack=true");
 
-        if (!options.getOptions().shouldUseStencilBuffer())
+        if (!options.getOptions().shouldUseStencilBuffer()) {
             commands.add("-Dforge.forceNoStencil=true");
+        }
 
         String javaArguments = version.getJavaArguments();
 
